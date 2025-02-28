@@ -1,21 +1,50 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+const gTTS = require('gtts');
+const path = require('path');
 
-interface DeckSettings {
+interface WordsSettings {
 	deckName: string,
 	modelName: string,
-	handler?: () => void;
+	generateAudio?: GenerateAuidoSettings,
+	handler?: (result: Record<string, string>) => void;
+}
+
+interface GenerateAuidoSettings {
+	language: string;
+	audioField?: string;
+	textToSpeechGetter?: (result: Record<string, string>) => string;
+	fileNameGenerator?: (note: AnkiNote, defaultFileName: string) => string;
+}
+
+interface GeneratedAudioInfo {
+	fileName: string;
+	textToSpeech: string;
+	language: string;
+}
+
+interface AnkiNote {
+	deckName: string;
+	modelName: string;
+	fields: Record<string, string>;
+	options: any;
+	tags: any[];
+}
+
+interface NoteInfo {
+	ankiNote: AnkiNote;
+	audioInfo?: GeneratedAudioInfo;
 }
 
 interface AGAnkiCardCreatorSetting {
 	anki_connect_url: string;
-	deckPreffix: string;
 	wordsPreffix: string;
+	ankiFileFolder: string;
 }
 
 const DEFAULT_SETTINGS: AGAnkiCardCreatorSetting = {
 	anki_connect_url: 'http://localhost:8765',
-	deckPreffix: 'Deck',
 	wordsPreffix: 'Words',
+	ankiFileFolder: `%appdata%/Anki2/user 1/collection.media/`
 }
 
 export default class AGAnkiCardCreator extends Plugin {
@@ -28,7 +57,7 @@ export default class AGAnkiCardCreator extends Plugin {
 		this.addCommand({
 			id: 'generate-cards',
 			name: 'Generate cards',
-			editorCallback: (editor: Editor, view: MarkdownView) => this.generateCards(editor, view)
+			editorCallback: (editor: Editor, view: MarkdownView) => this.processCards(editor, view)
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
@@ -47,28 +76,29 @@ export default class AGAnkiCardCreator extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	async generateCards(editor: Editor, view: MarkdownView) {
-		const notes = this.parseNotes(editor);
-
+	async processCards(editor: Editor, view: MarkdownView) {
+		const notes: NoteInfo[] = this.parseObsidianNote(editor);
 		const [added, notAdded] = await this.saveNotesToAnki(notes);
+
+		if (added.length != 0) {
+			for (const note of added) {
+				if (note.audioInfo) {
+					this.generateAudio(note.audioInfo);
+				}
+			}
+		}
+
 		new Notice(`${added.length} notes were adeed`);
 
 		if (notAdded.length != 0) {
 			for (const note of notAdded) {
-				new Notice(`Note '${Object.values(note.fields)[0]}' was't added`);
+				new Notice(`Note '${Object.values(note.ankiNote.fields)[0]}' was't added`);
 			}
 		}
-
-		console.log("Added:");
-		console.log(added);
-		console.log();
-		console.log("Not added");
-		console.log(notAdded);
-		console.log();
 	}
 
-	async saveNotesToAnki(decks: any) {
-
+	private async saveNotesToAnki(decks: NoteInfo[]) {
+		const notes = decks.map(d => d.ankiNote);
 		const canAdd = await fetch('http://127.0.0.1:8765', {
 			method: 'POST',
 			mode: 'cors',
@@ -81,16 +111,15 @@ export default class AGAnkiCardCreator extends Plugin {
 				action: "canAddNotes",
 				version: 6,
 				params: {
-					notes: decks
+					notes: notes
 				}
 			})
 		});
 
 		const canAddResult = await canAdd.json();
-		console.log(canAddResult);
 
-		const notAdded: any[] = [];
-		const added: any[] = [];
+		const notAdded: NoteInfo[] = [];
+		const added: NoteInfo[] = [];
 
 		canAddResult.result.forEach((item: any, index: number) => {
 			if (item) {
@@ -114,7 +143,7 @@ export default class AGAnkiCardCreator extends Plugin {
 					action: "addNotes",
 					version: 6,
 					params: {
-						notes: added
+						notes: added.map(n => n.ankiNote)
 					}
 				})
 			});
@@ -125,11 +154,9 @@ export default class AGAnkiCardCreator extends Plugin {
 		return [added, notAdded];
 	}
 
-	parseNotes(editor: Editor) {
-		const notes: any[] = [];
+	private parseObsidianNote(editor: Editor): NoteInfo[] {
+		const parsedDecks: NoteInfo[] = [];
 		const content = editor.getValue();
-		//const deckRegexp = /#*\s*Deck(?<settings>\n*\s*.*?)(?=\n#)(?:\n#*\s*Words\n(?<words>.*?)(?=\n(?:#|$)))/gs
-		// #*Words\n(?<settings>.*?)\n?\|(?<words>.*?)(?=\n(?:#|$))
 		const deckRegexp = new RegExp(`#*${this.settings.wordsPreffix}\\n(?<settings>.*?)\\n?\\|(?<words>.*?)(?=\\n(?:#|$))`, 'gs');
 
 		let block;
@@ -138,27 +165,27 @@ export default class AGAnkiCardCreator extends Plugin {
 				const { settings, words } = block.groups;
 
 				let parsedSettings = this.parseSettings(settings);
-				if (parsedSettings != null) {
-					const parsedCards = this.parseCards(words, parsedSettings);
-					notes.push(...parsedCards);
-				}
+				const parsedCards = this.parseFields(words, parsedSettings);
+				parsedDecks.push(...parsedCards);
 			}
 		}
 
-		return notes;
+		return parsedDecks;
 	}
 
-	parseSettings(str: string): DeckSettings | null {
+	private parseSettings(str: string): WordsSettings {
 		const settingsRegex = /```js\n(?<code>.*?)\n```/gms
 		const match = settingsRegex.exec(str);
-		if (match != null) {
-			let settings = eval('(' + match[1] + ')');
-			return settings;
+
+		if (match == null) {
+			throw new Error("Settings not found");
 		}
-		else return null;
+
+		let settings: WordsSettings = eval('(' + match[1] + ')');
+		return settings;
 	}
 
-	parseCards(str: string, settings: any) {
+	private parseFields(str: string, settings: WordsSettings): NoteInfo[] {
 		const content: string[] = str.split("\n").filter(s => s.trim());
 		if (content.length < 3) return [];
 
@@ -170,9 +197,10 @@ export default class AGAnkiCardCreator extends Plugin {
 			handler = settings.handler;
 		}
 
-		const words = rows.map(row => {
+		const words: NoteInfo[] = rows.map(row => {
 			const values = row.split('|').filter(v => v.trim());
 			const wordEntry: Record<string, string> = {};
+
 			headers.forEach((header, index) => {
 				if (header) {
 					wordEntry[header] = (values[index] || "").trim() || '';
@@ -183,7 +211,7 @@ export default class AGAnkiCardCreator extends Plugin {
 				handler(wordEntry);
 			}
 
-			return {
+			const ankiNote: AnkiNote = {
 				deckName: settings.deckName,
 				modelName: settings.modelName,
 				fields: wordEntry,
@@ -193,9 +221,74 @@ export default class AGAnkiCardCreator extends Plugin {
 				},
 				tags: []
 			};
+
+			const noteInfo: NoteInfo = {
+				ankiNote: ankiNote
+			}
+
+			if (settings.generateAudio) {
+				const defaultField = wordEntry[headers[0]];
+				const audioSettings = settings.generateAudio;
+				const audioField = audioSettings.audioField || "Audio";
+
+				let text: string = audioSettings.textToSpeechGetter
+					? audioSettings.textToSpeechGetter(wordEntry)
+					: defaultField;
+				text = this.normalizeTextToSpeech(text);
+
+				const fileName = this.prepareFileName(ankiNote, text, audioSettings);
+				wordEntry[audioField] = `[sound:${fileName}]`;
+
+				const audioInfo: GeneratedAudioInfo = {
+					fileName: fileName,
+					textToSpeech: text,
+					language: audioSettings.language
+				};
+				noteInfo.audioInfo = audioInfo;
+			}
+
+			return noteInfo;
 		});
 
 		return words;
+	}
+
+	private generateAudio(audioInfo: GeneratedAudioInfo) {
+		let text = audioInfo.textToSpeech;
+		if (!text) {
+			console.log("Text is empty");
+			return;
+		}
+
+		var gtts = new gTTS(text, audioInfo.language);
+
+		const filePath = path.join(this.settings.ankiFileFolder, audioInfo.fileName);
+		gtts.save(filePath, function (err: any, result: any) {
+			if (err) { throw new Error(err) }
+			console.log(`Success! Open file ${filePath} to hear result.`);
+		});
+	}
+
+	private normalizeTextToSpeech(text: string): string {
+		text = text.replace(/\(.*?\)|\[.*?\]|\{.*?\}|\<.*?\>/gm, "");
+		text = text.replace(/\*\*|__|==|\.\.\./g, "");
+		return text.trim();
+	}
+
+	private normalizeTextToSave(text: string): string {
+		text = text.replace(/[?\\/:*<>|]/g, "");
+		text = text.replace(/ /g, "_");
+		return text;
+	}
+
+	private prepareFileName(ankiNote: AnkiNote, text: string, audioSettings: GenerateAuidoSettings): string {
+		let fileName: string = `${ankiNote.deckName}-${ankiNote.modelName}-${text.trim()}`;
+		fileName = `__ag__${new Date().toISOString().substring(0, 10)}_${fileName}.mp3`;
+		if (audioSettings.fileNameGenerator) {
+			fileName = audioSettings.fileNameGenerator(ankiNote, fileName);
+		}
+		fileName = this.normalizeTextToSave(fileName);
+		return fileName;
 	}
 }
 
@@ -240,20 +333,20 @@ class SampleSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Deck header')
-			.addText(text => text
-				.setValue(this.plugin.settings.deckPreffix)
-				.onChange(async (value) => {
-					this.plugin.settings.deckPreffix = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
 			.setName('Words header')
 			.addText(text => text
 				.setValue(this.plugin.settings.wordsPreffix)
 				.onChange(async (value) => {
 					this.plugin.settings.wordsPreffix = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Anki file folder')
+			.addText(text => text
+				.setValue(this.plugin.settings.ankiFileFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.ankiFileFolder = value;
 					await this.plugin.saveSettings();
 				}));
 	}
