@@ -37,13 +37,11 @@ interface NoteInfo {
 
 interface AGAnkiCardCreatorSetting {
 	anki_connect_url: string;
-	wordsPreffix: string;
 	ankiFileFolder: string;
 }
 
 const DEFAULT_SETTINGS: AGAnkiCardCreatorSetting = {
 	anki_connect_url: 'http://localhost:8765',
-	wordsPreffix: 'Words',
 	ankiFileFolder: `%appdata%/Anki2/user 1/collection.media/`
 }
 
@@ -157,7 +155,7 @@ export default class AGAnkiCardCreator extends Plugin {
 	private parseObsidianNote(editor: Editor): NoteInfo[] {
 		const parsedDecks: NoteInfo[] = [];
 		const content = editor.getValue();
-		const deckRegexp = new RegExp(`#*${this.settings.wordsPreffix}\\n(?<settings>.*?)\\n?\\|(?<words>.*?)(?=\\n(?:#|$))`, 'gs');
+		const deckRegexp = /\`\`\`js\n?(?<settings>.*?)\`\`\`\n*\|(?<words>.*?)(?=\n(?:#|$))/gs
 
 		let block;
 		while ((block = deckRegexp.exec(content)) != null) {
@@ -174,14 +172,7 @@ export default class AGAnkiCardCreator extends Plugin {
 	}
 
 	private parseSettings(str: string): WordsSettings {
-		const settingsRegex = /```js\n(?<code>.*?)\n```/gms
-		const match = settingsRegex.exec(str);
-
-		if (match == null) {
-			throw new Error("Settings not found");
-		}
-
-		let settings: WordsSettings = eval('(' + match[1] + ')');
+		let settings: WordsSettings = eval('(' + str + ')');
 		return settings;
 	}
 
@@ -329,15 +320,6 @@ class SampleSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.anki_connect_url)
 				.onChange(async (value) => {
 					this.plugin.settings.anki_connect_url = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Words header')
-			.addText(text => text
-				.setValue(this.plugin.settings.wordsPreffix)
-				.onChange(async (value) => {
-					this.plugin.settings.wordsPreffix = value;
 					await this.plugin.saveSettings();
 				}));
 
