@@ -1,39 +1,13 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import SampleModal from 'src/modals/sampleModal';
+import { normalizeTextToSpeech, prepareFileName } from './utils';
+import NoteInfo from 'src/types/NoteInfo';
+import WordsSettings from './types/WordSettings';
+import AnkiNote from './types/AnkiNote';
+import GeneratedAudioInfo from './types/GeneratedAudioInfo';
+
 const gTTS = require('gtts');
 const path = require('path');
-
-interface WordsSettings {
-	deckName: string,
-	modelName: string,
-	generateAudio?: GenerateAuidoSettings,
-	handler?: (result: Record<string, string>) => void;
-}
-
-interface GenerateAuidoSettings {
-	language: string;
-	audioField?: string;
-	textToSpeechGetter?: (result: Record<string, string>) => string;
-	fileNameGenerator?: (note: AnkiNote, defaultFileName: string) => string;
-}
-
-interface GeneratedAudioInfo {
-	fileName: string;
-	textToSpeech: string;
-	language: string;
-}
-
-interface AnkiNote {
-	deckName: string;
-	modelName: string;
-	fields: Record<string, string>;
-	options: any;
-	tags: any[];
-}
-
-interface NoteInfo {
-	ankiNote: AnkiNote;
-	audioInfo?: GeneratedAudioInfo;
-}
 
 interface AGAnkiCardCreatorSetting {
 	anki_connect_url: string;
@@ -63,7 +37,6 @@ export default class AGAnkiCardCreator extends Plugin {
 	}
 
 	onunload() {
-
 	}
 
 	async loadSettings() {
@@ -86,18 +59,7 @@ export default class AGAnkiCardCreator extends Plugin {
 			}
 		}
 
-		if (false) {
-			new Notice(`${added.length} notes were adeed`);
-
-			if (notAdded.length != 0) {
-				for (const note of notAdded) {
-					new Notice(`Note '${Object.values(note.ankiNote.fields)[0]}' was't added`);
-				}
-			}
-		}
-		else {
-			new SampleModal(this.app, added, notAdded).open();
-		}
+		new SampleModal(this.app, added, notAdded).open();
 	}
 
 	private async saveNotesToAnki(decks: NoteInfo[]) {
@@ -177,7 +139,7 @@ export default class AGAnkiCardCreator extends Plugin {
 	}
 
 	private parseSettings(str: string): WordsSettings {
-		let settings: WordsSettings = eval('(' + str + ')');
+		let settings: WordsSettings = (0, eval)('(' + str + ')');
 		return settings;
 	}
 
@@ -230,9 +192,9 @@ export default class AGAnkiCardCreator extends Plugin {
 				let text: string = audioSettings.textToSpeechGetter
 					? audioSettings.textToSpeechGetter(wordEntry)
 					: defaultField;
-				text = this.normalizeTextToSpeech(text);
+				text = normalizeTextToSpeech(text);
 
-				const fileName = this.prepareFileName(ankiNote, text, audioSettings);
+				const fileName = prepareFileName(ankiNote, text, audioSettings);
 				wordEntry[audioField] = `[sound:${fileName}]`;
 
 				const audioInfo: GeneratedAudioInfo = {
@@ -263,84 +225,6 @@ export default class AGAnkiCardCreator extends Plugin {
 			if (err) { throw new Error(err) }
 			console.log(`Success! Open file ${filePath} to hear result.`);
 		});
-	}
-
-	private normalizeTextToSpeech(text: string): string {
-		text = text.replace(/\(.*?\)|\[.*?\]|\{.*?\}|\<.*?\>/gm, "");
-		text = text.replace(/\*\*|__|==|\.\.\./g, "");
-		return text.trim();
-	}
-
-	private normalizeTextToSave(text: string): string {
-		text = text.replace(/[?\\/:*<>|]/g, "");
-		text = text.replace(/ /g, "_");
-		return text;
-	}
-
-	private prepareFileName(ankiNote: AnkiNote, text: string, audioSettings: GenerateAuidoSettings): string {
-		let fileName: string = `${ankiNote.deckName}-${ankiNote.modelName}-${text.trim()}`;
-		fileName = `__ag__${new Date().toISOString().substring(0, 10)}_${fileName}.mp3`;
-		if (audioSettings.fileNameGenerator) {
-			fileName = audioSettings.fileNameGenerator(ankiNote, fileName);
-		}
-		fileName = this.normalizeTextToSave(fileName);
-		return fileName;
-	}
-}
-
-class SampleModal extends Modal {
-	private addedItems: NoteInfo[];
-	private notAddedItems: NoteInfo[];
-
-	constructor(app: App, addedItems: NoteInfo[], notAddedItems: NoteInfo[]) {
-		super(app);
-
-		this.addedItems = addedItems;
-		this.notAddedItems = notAddedItems;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-
-		contentEl.empty(); // Clear any previous content
-		contentEl.createEl('h2', { text: 'Operation Report' });
-
-		// Added Section
-		const addedDiv = contentEl.createDiv({ cls: 'report-section' });
-		addedDiv.createEl('h3', { text: '✅ Added' });
-		if (this.addedItems.length > 0) {
-			const ul = addedDiv.createEl('ul');
-			this.addedItems.forEach(note => {
-				ul.createEl('li', { text: `${Object.values(note.ankiNote.fields)[0]}` });
-			});
-		} else {
-			addedDiv.createEl('p', { text: 'No items were added.' });
-		}
-
-		// Not Added Section
-		const notAddedDiv = contentEl.createDiv({ cls: 'report-section' });
-		notAddedDiv.createEl('h3', { text: '❌ Not Added' });
-		if (this.notAddedItems.length > 0) {
-			const ul = notAddedDiv.createEl('ul');
-			this.notAddedItems.forEach(note => {
-				ul.createEl('li', { text: `${Object.values(note.ankiNote.fields)[0]}` });
-			});
-		} else {
-			notAddedDiv.createEl('p', { text: 'All items were added successfully.' });
-		}
-
-		// Close button
-		new Setting(contentEl)
-			.addButton(btn =>
-				btn.setButtonText('Close')
-					.setCta()
-					.onClick(() => this.close())
-			);
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
 	}
 }
 
