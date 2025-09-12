@@ -150,7 +150,7 @@ export default class AGAnkiCardCreator extends Plugin {
 		const headers = content[0].split('|').map(h => h.trim()).filter(h => h);
 		const rows = content.slice(2); // skip header and separator
 
-		let handler = null;
+		let handler : any = null;
 		if (settings.handler) {
 			handler = settings.handler;
 		}
