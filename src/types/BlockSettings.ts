@@ -1,8 +1,10 @@
 import GenerateAuidoSettings from "./GenerateAuidoSettings";
+import Note from "./Note";
 
-export default interface WordsSettings {
+export default interface BlockSettings {
+    key?: string;
     deckName: string;
     modelName: string;
     generateAudio?: GenerateAuidoSettings;
-    handler?: (result: Record<string, string>) => void;
+    handler?: (result: Note) => void;
 }

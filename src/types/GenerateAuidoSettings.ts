@@ -1,8 +1,9 @@
-import AnkiNote from "./AnkiNote";
+import BlockSettings from "./BlockSettings";
+import Note from "./Note";
 
 export default interface GenerateAuidoSettings {
     language: string;
     audioField?: string;
-    textToSpeechGetter?: (result: Record<string, string>) => string;
-    fileNameGenerator?: (note: AnkiNote, defaultFileName: string) => string;
+    textToSpeechGetter?: (result: Note) => string;
+    fileNameGenerator?: (settings: BlockSettings, defaultFileName: string) => string;
 }
