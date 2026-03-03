@@ -55,13 +55,13 @@ export default class AGAnkiCardCreator extends Plugin {
 			this.ankiSaver.appendNotes(block.settings, block.notes);
 		});
 
-		const [added, notAdded] = await this.ankiSaver.canSaveNotes();
+		const [added, notAdded] = await this.ankiSaver.canSaveNotes(this.settings.anki_connect_url);
 
 		if (added.length > 0) {
 			added.forEach(note => {
 				note.audioInfo = this.audioGenerator.generateAudioInfo(note.settings, note.ankiNote.fields);
 			})
-			const saveResult = await this.ankiSaver.saveNotesToAnki(added);
+			const saveResult = await this.ankiSaver.saveNotesToAnki(added, this.settings.anki_connect_url);
 			isSuccess = saveResult;
 		}
 		else {
@@ -69,10 +69,18 @@ export default class AGAnkiCardCreator extends Plugin {
 		}
 
 		if (isSuccess) {
-			for (const note of added) {
-				if (note.audioInfo) {
-					this.audioGenerator.generateAudioFile(note.audioInfo, this.settings.ankiFileFolder);
-				}
+			const audioPromises = added
+				.filter(note => note.audioInfo)
+				.map(note =>
+					this.audioGenerator.generateAudioFile(note.audioInfo!, this.settings.ankiFileFolder)
+						.catch(err => {
+							console.error(`Audio generation failed for ${note.audioInfo?.fileName}: ${err}`);
+							new Notice(`Failed to generate audio: ${err.message}`);
+						})
+				);
+
+			if (audioPromises.length > 0) {
+				await Promise.allSettled(audioPromises);
 			}
 		}
 

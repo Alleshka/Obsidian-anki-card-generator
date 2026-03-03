@@ -46,8 +46,8 @@ export default class AnkiSaver {
 		})
 	}
 
-	public async canSaveNotes(): Promise<[PendingNote[], PendingNote[]]> {
-		const canAdd = await fetch('http://127.0.0.1:8765', {
+	public async canSaveNotes(ankiConnectUrl: string): Promise<[PendingNote[], PendingNote[]]> {
+		const canAdd = await fetch(ankiConnectUrl, {
 			method: 'POST',
 			mode: 'cors',
 			headers: {
@@ -81,9 +81,9 @@ export default class AnkiSaver {
 		return [added, notAdded];
 	}
 
-	public async saveNotesToAnki(added: PendingNote[]): Promise<boolean> {
+	public async saveNotesToAnki(added: PendingNote[], ankiConnectUrl: string): Promise<boolean> {
 		if (added.length > 0) {
-			const response = await fetch('http://127.0.0.1:8765', {
+			const response = await fetch(ankiConnectUrl, {
 				method: 'POST',
 				mode: 'cors',
 				headers: {

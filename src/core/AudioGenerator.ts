@@ -11,19 +11,32 @@ export interface GeneratedAudioInfo {
 }
 
 export default class AudioGenerator {
-    public generateAudioFile(audioInfo: GeneratedAudioInfo, ankiFileFolder: string): void {
-        let text = audioInfo.textToSpeech;
-        if (!text) {
-            console.log("Text is empty");
-            return;
-        }
+    public generateAudioFile(audioInfo: GeneratedAudioInfo, ankiFileFolder: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            let text = audioInfo.textToSpeech;
+            if (!text) {
+                console.log("Text is empty");
+                resolve();
+                return;
+            }
 
-        var gtts = new gTTS(text, audioInfo.language);
+            try {
+                var gtts = new gTTS(text, audioInfo.language);
 
-        const filePath = path.join(ankiFileFolder, audioInfo.fileName);
-        gtts.save(filePath, function (err: any, result: any) {
-            if (err) { throw new Error(err) }
-            console.log(`Success! Open file ${filePath} to hear result.`);
+                const filePath = path.join(ankiFileFolder, audioInfo.fileName);
+                gtts.save(filePath, function (err: any, result: any) {
+                    if (err) {
+                        console.error(`Failed to generate audio: ${err}`);
+                        reject(new Error(err));
+                    } else {
+                        console.log(`Success! Audio saved to ${filePath}`);
+                        resolve();
+                    }
+                });
+            } catch (err) {
+                console.error(`Error creating audio file: ${err}`);
+                reject(err);
+            }
         });
     }
 
