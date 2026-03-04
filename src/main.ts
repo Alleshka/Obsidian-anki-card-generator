@@ -48,45 +48,69 @@ export default class AGAnkiCardCreator extends Plugin {
 	async processCards(editor: Editor, view: MarkdownView) {
 		let isSuccess = false;
 
-		const content = editor.getValue();
-		const blocks: BlockInfo[] = this.obsidianNoteParser.parseObsidianNote(content);
+		try {
+			const content = editor.getValue();
+			const blocks: BlockInfo[] = this.obsidianNoteParser.parseObsidianNote(content);
 
-		blocks.forEach(block => {
-			this.ankiSaver.appendNotes(block.settings, block.notes);
-		});
+			blocks.forEach(block => {
+				this.ankiSaver.appendNotes(block.settings, block.notes);
+			});
 
-		const [added, notAdded] = await this.ankiSaver.canSaveNotes(this.settings.anki_connect_url);
+			let added: typeof this.ankiSaver['notesToSave'] = [];
+			let notAdded: typeof this.ankiSaver['notesToSave'] = [];
 
-		if (added.length > 0) {
-			added.forEach(note => {
-				note.audioInfo = this.audioGenerator.generateAudioInfo(note.settings, note.ankiNote.fields);
-			})
-			const saveResult = await this.ankiSaver.saveNotesToAnki(added, this.settings.anki_connect_url);
-			isSuccess = saveResult;
-		}
-		else {
-			isSuccess = false;
-		}
-
-		if (isSuccess) {
-			const audioPromises = added
-				.filter(note => note.audioInfo)
-				.map(note =>
-					this.audioGenerator.generateAudioFile(note.audioInfo!, this.settings.ankiFileFolder)
-						.catch(err => {
-							console.error(`Audio generation failed for ${note.audioInfo?.fileName}: ${err}`);
-							new Notice(`Failed to generate audio: ${err.message}`);
-						})
-				);
-
-			if (audioPromises.length > 0) {
-				await Promise.allSettled(audioPromises);
+			try {
+				[added, notAdded] = await this.ankiSaver.canSaveNotes(this.settings.anki_connect_url);
+			} catch (err) {
+				this._throwException(err, `Cannot connect to AnkiConnect at ${this.settings.anki_connect_url}\n\nMake sure Anki is running and AnkiConnect is installed.`);
+				return;
 			}
+
+			if (added.length > 0) {
+				added.forEach(note => {
+					note.audioInfo = this.audioGenerator.generateAudioInfo(note.settings, note.ankiNote.fields);
+				})
+
+				try {
+					const saveResult = await this.ankiSaver.saveNotesToAnki(added, this.settings.anki_connect_url);
+					isSuccess = saveResult;
+				} catch (err) {
+					this._throwException(err, 'Failed to save notes to Anki');
+					return;
+				}
+			}
+			else {
+				isSuccess = false;
+			}
+
+			if (isSuccess) {
+				const audioPromises = added
+					.filter(note => note.audioInfo)
+					.map(note =>
+						this.audioGenerator.generateAudioFile(note.audioInfo!, this.settings.ankiFileFolder)
+							.catch(err => {
+								console.error(`Audio generation failed for ${note.audioInfo?.fileName}: ${err}`);
+								new Notice(`Failed to generate audio: ${err instanceof Error ? err.message : String(err)}`);
+							})
+					);
+
+				if (audioPromises.length > 0) {
+					await Promise.allSettled(audioPromises);
+				}
+			}
+
+			this.ankiSaver.clear();
+
+			new SampleModal(this.app, isSuccess, added.map(note => note.ankiNote.fields), notAdded.map(note => note.ankiNote.fields)).open();
+		} catch (err) {
+			this._throwException(err);
 		}
+	}
 
+	_throwException(error: Error, message: string | null = null) {
+		console.error(message ?? error.message, error);
+		new Notice(message ?? `Unexpected error: ${error instanceof Error ? error.message : String(error)}`)
 		this.ankiSaver.clear();
-
-		new SampleModal(this.app, isSuccess, added.map(note => note.ankiNote.fields), notAdded.map(note => note.ankiNote.fields)).open();
 	}
 }
 
