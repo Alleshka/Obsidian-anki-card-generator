@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS: AGAnkiCardCreatorSetting = {
 }
 
 export default class AGAnkiCardCreator extends Plugin {
-	settings: AGAnkiCardCreatorSetting;
+	settings: AGAnkiCardCreatorSetting = DEFAULT_SETTINGS;
 	private audioGenerator: AudioGenerator = new AudioGenerator();
 	private obsidianNoteParser: ObsidianNoteParser = new ObsidianNoteParser();
 	private ankiSaver: AnkiSaver = new AnkiSaver();
@@ -61,7 +61,7 @@ export default class AGAnkiCardCreator extends Plugin {
 
 			try {
 				[added, notAdded] = await this.ankiSaver.canSaveNotes(this.settings.anki_connect_url);
-			} catch (err) {
+			} catch (err: any) {
 				this._throwException(err, `Cannot connect to AnkiConnect at ${this.settings.anki_connect_url}\n\nMake sure Anki is running and AnkiConnect is installed.`);
 				return;
 			}
@@ -74,7 +74,7 @@ export default class AGAnkiCardCreator extends Plugin {
 				try {
 					const saveResult = await this.ankiSaver.saveNotesToAnki(added, this.settings.anki_connect_url);
 					isSuccess = saveResult;
-				} catch (err) {
+				} catch (err : any) {
 					this._throwException(err, 'Failed to save notes to Anki');
 					return;
 				}
@@ -102,7 +102,7 @@ export default class AGAnkiCardCreator extends Plugin {
 			this.ankiSaver.clear();
 
 			new SampleModal(this.app, isSuccess, added.map(note => note.ankiNote.fields), notAdded.map(note => note.ankiNote.fields)).open();
-		} catch (err) {
+		} catch (err: any) {
 			this._throwException(err);
 		}
 	}

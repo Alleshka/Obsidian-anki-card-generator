@@ -10,7 +10,7 @@ export interface BlockInfo {
 export default class ObsidianNoteParser {
     public parseObsidianNote(content: string): BlockInfo[] {
         const blocks: BlockInfo[] = [];
-        const deckRegexp = /\`\`\`js\n?(?<settings>.*?)\`\`\`\n*\|(?<words>.*?)(?=\n(?:#|$))/gs
+        const deckRegexp = /\`\`\`js\n?(?<settings>.*?)\`\`\`\n*(?<words>\|.*?)(?=\n(?:#|$))/gs
 
         let block;
         while ((block = deckRegexp.exec(content)) != null) {
@@ -32,18 +32,18 @@ export default class ObsidianNoteParser {
     }
 
     private parseFields(settings: BlockSettings, str: string): Note[] {
-        const content: string[] = str.split("\n").filter(s => s.trim());
+        const content: string[] = str.split("\n").map(s => s.trim());
         if (content.length < 3) return [];
 
-        const headers = content[0].split('|').map(h => h.trim()).filter(h => h);
+        const headers = content[0].split('|').map(h => h.trim());
         const rows = content.slice(2); // skip header and separator
 
         if (!settings.key) {
-            settings.key = headers[0];
+            settings.key = headers.find(h => h.trim())
         }
 
         const words: Note[] = rows.map(row => {
-            const values = row.split('|').filter(v => v.trim());
+            const values = row.split('|').map(value => value.trim());
             const note: Note = {};
 
             headers.forEach((header, index) => {
