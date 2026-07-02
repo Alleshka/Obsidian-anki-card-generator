@@ -140,6 +140,7 @@ class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Anki file folder')
+			.setDesc('The folder where audio files will be saved. You can use environment variables like %appdata%')
 			.addText(text => text
 				.setValue(this.plugin.settings.ankiFileFolder)
 				.onChange(async (value) => {
