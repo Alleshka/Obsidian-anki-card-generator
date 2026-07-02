@@ -1,12 +1,12 @@
 import { App, Modal, Setting } from 'obsidian';
-import Note from '../types/Note';
+import { PendingNote } from 'src/core/AnkiSaver';
 
 export default class SampleModal extends Modal {
-	private addedItems: Note[];
-	private notAddedItems: Note[];
+	private addedItems: PendingNote[];
+	private notAddedItems: PendingNote[];
 	private isSuccess: boolean;
 
-	constructor(app: App, isSuccess: boolean, addedItems: Note[], notAddedItems: Note[]) {
+	constructor(app: App, isSuccess: boolean, addedItems: PendingNote[], notAddedItems: PendingNote[]) {
 		super(app);
 
 		this.isSuccess = isSuccess;
@@ -19,14 +19,13 @@ export default class SampleModal extends Modal {
 
 		contentEl.empty(); // Clear any previous content
 
-
 		// Added Section
 		const addedDiv = contentEl.createDiv({ cls: 'report-section' });
 		addedDiv.createEl('h3', { text: '✅ Added' });
 		if (this.addedItems.length > 0 && this.isSuccess) {
 			const ul = addedDiv.createEl('ul');
 			this.addedItems.forEach(note => {
-				ul.createEl('li', { text: `${Object.values(note)[0]}` });
+				ul.createEl('li', { text: `${note.ankiNote.fields[note.settings.key!]}` });
 			});
 		} else {
 			addedDiv.createEl('p', { text: 'No items were added.' });
@@ -38,12 +37,12 @@ export default class SampleModal extends Modal {
 		if (this.notAddedItems.length > 0 || !this.isSuccess) {
 			const ul = notAddedDiv.createEl('ul');
 			this.notAddedItems.forEach(note => {
-				ul.createEl('li', { text: `${Object.values(note)[0]}` });
+				ul.createEl('li', { text: `${note.ankiNote.fields[note.settings.key!]}` });
 			});
 
 			if (!this.isSuccess) {
 				this.addedItems.forEach(note => {
-					ul.createEl('li', { text: `${Object.values(note)[0]}` });
+					ul.createEl('li', { text: `${note.ankiNote.fields[note.settings.key!]}` });
 				});
 			}
 		} else {

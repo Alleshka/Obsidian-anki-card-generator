@@ -10,16 +10,18 @@ export interface BlockInfo {
 export default class ObsidianNoteParser {
     public parseObsidianNote(content: string): BlockInfo[] {
         const blocks: BlockInfo[] = [];
-        const deckRegexp = /\`\`\`js\n?(?<settings>.*?)\`\`\`\n*(?<words>\|.*?)(?=\n(?:#|$))/gs
+        const deckRegexp = /```js\s*(?<settings>[\s\S]*?)\s*```\s*[\s\S]*?(?<words>\|.*?)(?=\n\s*(?:#|$))/gs
 
         let block;
         while ((block = deckRegexp.exec(content)) != null) {
             if (block && block.groups) {
                 const { settings, words } = block.groups;
-
                 let parsedSettings = this.parseSettings(settings);
                 const parsedCards = this.parseFields(parsedSettings, words);
-                blocks.push({ settings: parsedSettings, notes: parsedCards });
+
+                if (parsedCards.length > 0) {
+                    blocks.push({ settings: parsedSettings, notes: parsedCards });
+                }
             }
         }
 
@@ -42,8 +44,12 @@ export default class ObsidianNoteParser {
             settings.key = headers.find(h => h.trim())
         }
 
-        const words: Note[] = rows.map(row => {
+        const words: Note[] = [];
+
+        rows.forEach(row => {
             const values = row.split('|').map(value => value.trim());
+            if (values.filter(v => v).length === 0) return; // skip empty rows
+
             const note: Note = {};
 
             headers.forEach((header, index) => {
@@ -56,7 +62,7 @@ export default class ObsidianNoteParser {
                 settings.handler(note);
             }
 
-            return note;
+            words.push(note);
         });
 
         return words;

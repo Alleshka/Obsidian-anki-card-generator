@@ -101,7 +101,7 @@ export default class AGAnkiCardCreator extends Plugin {
 
 			this.ankiSaver.clear();
 
-			new SampleModal(this.app, isSuccess, added.map(note => note.ankiNote.fields), notAdded.map(note => note.ankiNote.fields)).open();
+			new SampleModal(this.app, isSuccess, added, notAdded).open();
 		} catch (err: any) {
 			this._throwException(err);
 		}
